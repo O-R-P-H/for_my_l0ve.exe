@@ -71,7 +71,6 @@ const heart = ref(null)
 const showFinal = ref(false)
 const particles = ref([])
 const glowIntensity = ref(20)
-const vibrationEnabled = ref(false)
 
 let particleId = 0
 let animationFrame = null
@@ -81,7 +80,6 @@ let targetBPM = 65
 let currentBPM = 65
 let beatPhase = 0
 let lastParticleCleanup = 0
-let vibrationTimeout = null
 
 // ========== КОНСТАНТЫ ==========
 const MAX_BPM = 180
@@ -92,47 +90,59 @@ const MAX_PARTICLES = 80
 // Эмодзи для частиц
 const EMOJIS = ['❤️', '💖', '💗', '💓', '💕', '💘', '💝', '✨', '⭐', '🌟', '🔥', '🌸', '🫶']
 
-// ========== ПРОВЕРКА ВИБРАЦИИ ==========
-const checkVibrationSupport = () => {
-  // Проверяем поддержку вибрации на iOS
-  if (window.navigator && window.navigator.vibrate) {
-    // На iOS нужно запросить разрешение через пользовательский жест
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
-
-    if (isIOS) {
-      // Для iOS просто проверяем наличие функции
-      vibrationEnabled.value = true
-      console.log('iOS vibration supported (requires user gesture)')
-    } else {
-      vibrationEnabled.value = true
+// ========== HAPTIC FEEDBACK ДЛЯ SAFARI ==========
+const triggerHaptic = (type = 'light') => {
+  // Пробуем использовать Haptic Feedback API (работает в Safari на iOS)
+  if (window && window.__vibrate) {
+    try {
+      window.__vibrate(type)
+    } catch (e) {
+      // Игнорируем ошибки
     }
-  } else {
-    console.log('Vibration not supported')
-    vibrationEnabled.value = false
+  }
+
+  // Альтернативный метод через AudioContext (создает легкую вибрацию)
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    if (audioContext && audioContext.state === 'running') {
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      gainNode.gain.value = 0.1 // Очень тихо
+      oscillator.frequency.value = 200
+
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.05) // 50ms
+    }
+  } catch (e) {
+    // Игнорируем ошибки аудио
   }
 }
 
-// ========== ВИБРАЦИЯ В ТАКТ ==========
-const vibrateInBeat = () => {
-  if (!vibrationEnabled.value || !touching.value || showFinal.value) return
+// Разные типы тактильных ощущений
+const hapticBeat = () => {
+  triggerHaptic('light')
+}
 
-  // Очищаем предыдущий таймер
-  if (vibrationTimeout) {
-    clearTimeout(vibrationTimeout)
-  }
+const hapticDoubleBeat = () => {
+  triggerHaptic('light')
+  setTimeout(() => triggerHaptic('light'), 30)
+}
 
-  // Длина вибрации зависит от BPM (чем выше BPM, тем короче вибрация)
-  const vibrationDuration = Math.max(20, 80 - (currentBPM - BASE_BPM) * 0.5)
+const hapticTripleBeat = () => {
+  triggerHaptic('light')
+  setTimeout(() => triggerHaptic('light'), 20)
+  setTimeout(() => triggerHaptic('light'), 40)
+}
 
-  try {
-    // Пробуем вызвать вибрацию
-    window.navigator.vibrate(vibrationDuration)
-
-    // На iOS вибрация может не сработать без пользовательского жеста,
-    // но мы всё равно пытаемся
-  } catch (e) {
-    console.log('Vibration failed:', e)
-  }
+const hapticFinale = () => {
+  triggerHaptic('medium')
+  setTimeout(() => triggerHaptic('medium'), 50)
+  setTimeout(() => triggerHaptic('medium'), 100)
+  setTimeout(() => triggerHaptic('medium'), 150)
 }
 
 // ========== ВЫЧИСЛЯЕМЫЕ СВОЙСТВА ==========
@@ -204,9 +214,15 @@ const updateBeatAnimation = () => {
       heartScale.value = scaleFactor
     }
 
-    // ВИБРАЦИЯ В ПИКЕ ПУЛЬСАЦИИ
-    if (touching.value && beatPhase > 0.12 && beatPhase < 0.18) {
-      vibrateInBeat()
+    // ТАКТИЛЬНАЯ ОТДАЧА В НАЧАЛЕ КАЖДОГО УДАРА
+    if (touching.value && beatPhase < 0.05) {
+      if (currentBPM < 100) {
+        hapticBeat()
+      } else if (currentBPM < 140) {
+        hapticDoubleBeat()
+      } else {
+        hapticTripleBeat()
+      }
     }
 
     if (touching.value && beatPhase > 0.1 && beatPhase < 0.2 && particles.value.length < MAX_PARTICLES) {
@@ -322,15 +338,8 @@ const start = (e) => {
   touching.value = true
   touchStartTime.value = Date.now()
 
-  // Пробуем активировать вибрацию пользовательским жестом
-  if (vibrationEnabled.value) {
-    try {
-      // Короткая вибрация для подтверждения касания
-      window.navigator.vibrate(10)
-    } catch (e) {
-      console.log('Initial vibration failed')
-    }
-  }
+  // Тактильная отдача при касании
+  hapticBeat()
 
   for (let i = 0; i < 25; i++) {
     setTimeout(() => createParticle(true), i * 2)
@@ -340,10 +349,6 @@ const start = (e) => {
 const end = (e) => {
   e.preventDefault()
   touching.value = false
-
-  if (vibrationTimeout) {
-    clearTimeout(vibrationTimeout)
-  }
 }
 
 // ========== ФИНАЛ ==========
@@ -355,9 +360,8 @@ const final = () => {
     setTimeout(() => createParticle(true), i * 1.5)
   }
 
-  if (vibrationEnabled.value) {
-    window.navigator.vibrate([80, 40, 80, 40, 160])
-  }
+  // Финальная тактильная отдача
+  hapticFinale()
 }
 
 // ========== СБРОС ==========
@@ -372,17 +376,12 @@ const reset = () => {
   lastBeatTime = Date.now()
   beatPhase = 0
   particles.value = []
-
-  if (vibrationTimeout) {
-    clearTimeout(vibrationTimeout)
-  }
 }
 
 // ========== LIFECYCLE ==========
 onMounted(() => {
   nextTick(() => {
     lastBeatTime = Date.now()
-    checkVibrationSupport()
     updateBPMSmoothly()
     updateBeatAnimation()
     startParticleFlow()
@@ -399,9 +398,6 @@ onUnmounted(() => {
   cancelAnimationFrame(animationFrame)
   cancelAnimationFrame(beatAnimationFrame)
   clearInterval(particleFlowInterval)
-  if (vibrationTimeout) {
-    clearTimeout(vibrationTimeout)
-  }
 })
 
 const message = ref('Спасибо, что держишь моё сердце. С тобой оно бьется чаще.')
