@@ -62,6 +62,24 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 
+// ========== TELEGRAM WEBAPP ==========
+// Объявляем тип для Telegram
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp: {
+        ready: () => void
+            expand: () => void
+        HapticFeedback?: {
+      impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void
+          notificationOccurred: (type: 'error' | 'success' | 'warning') => void
+        selectionChanged: () => void
+  }
+  }
+  }
+  }
+}
+
 // ========== СОСТОЯНИЕ ==========
 const touching = ref(false)
 const touchStartTime = ref(0)
@@ -72,6 +90,10 @@ const showFinal = ref(false)
 const particles = ref([])
 const glowIntensity = ref(20)
 
+// Флаг для Telegram
+const isTelegram = ref(false)
+const tg = ref(null)
+
 let particleId = 0
 let animationFrame = null
 let beatAnimationFrame = null
@@ -79,7 +101,6 @@ let lastBeatTime = 0
 let targetBPM = 65
 let currentBPM = 65
 let beatPhase = 0
-let lastParticleCleanup = 0
 
 // ========== КОНСТАНТЫ ==========
 const MAX_BPM = 180
@@ -90,59 +111,97 @@ const MAX_PARTICLES = 80
 // Эмодзи для частиц
 const EMOJIS = ['❤️', '💖', '💗', '💓', '💕', '💘', '💝', '✨', '⭐', '🌟', '🔥', '🌸', '🫶']
 
-// ========== HAPTIC FEEDBACK ДЛЯ SAFARI ==========
-const triggerHaptic = (type = 'light') => {
-  // Пробуем использовать Haptic Feedback API (работает в Safari на iOS)
-  if (window && window.__vibrate) {
+// ========== ИНИЦИАЛИЗАЦИЯ TELEGRAM ==========
+const initTelegram = () => {
+  // Проверяем наличие Telegram WebApp
+  if (window.Telegram?.WebApp) {
+    tg.value = window.Telegram.WebApp
+    isTelegram.value = true
+
+    // Инициализируем
+    tg.value.ready()
+    tg.value.expand()
+
+    console.log('Telegram WebApp initialized, Haptic available:', !!tg.value.HapticFeedback)
+  } else {
+    console.log('Not in Telegram WebApp')
+  }
+}
+
+// ========== ФУНКЦИИ HAPTIC FEEDBACK ==========
+const hapticImpact = (style = 'light') => {
+  if (tg.value?.HapticFeedback) {
     try {
-      window.__vibrate(type)
+      tg.value.HapticFeedback.impactOccurred(style)
+      return true
     } catch (e) {
-      // Игнорируем ошибки
+      console.log('Haptic error:', e)
     }
   }
+  return false
+}
 
-  // Альтернативный метод через AudioContext (создает легкую вибрацию)
-  try {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
-    if (audioContext && audioContext.state === 'running') {
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-
-      gainNode.gain.value = 0.1 // Очень тихо
-      oscillator.frequency.value = 200
-
-      oscillator.start(audioContext.currentTime)
-      oscillator.stop(audioContext.currentTime + 0.05) // 50ms
+const hapticNotification = (type = 'success') => {
+  if (tg.value?.HapticFeedback) {
+    try {
+      tg.value.HapticFeedback.notificationOccurred(type)
+      return true
+    } catch (e) {
+      console.log('Haptic notification error:', e)
     }
-  } catch (e) {
-    // Игнорируем ошибки аудио
+  }
+  return false
+}
+
+const hapticSelection = () => {
+  if (tg.value?.HapticFeedback) {
+    try {
+      tg.value.HapticFeedback.selectionChanged()
+      return true
+    } catch (e) {
+      console.log('Haptic selection error:', e)
+    }
+  }
+  return false
+}
+
+// ========== ВИБРАЦИЯ В ТАКТ СЕРДЦУ ==========
+const heartbeatHaptic = () => {
+  if (!isTelegram.value || !touching.value) return
+
+  // Разные паттерны в зависимости от BPM
+  if (currentBPM < 100) {
+    // Медленный пульс - один легкий удар
+    hapticImpact('light')
+  }
+  else if (currentBPM < 140) {
+    // Средний пульс - двойной удар
+    hapticImpact('medium')
+    setTimeout(() => hapticImpact('light'), 30)
+  }
+  else {
+    // Быстрый пульс - тройной удар
+    hapticImpact('heavy')
+    setTimeout(() => hapticImpact('medium'), 20)
+    setTimeout(() => hapticImpact('light'), 40)
   }
 }
 
-// Разные типы тактильных ощущений
-const hapticBeat = () => {
-  triggerHaptic('light')
+// Вибрация при касании
+const touchHaptic = () => {
+  if (isTelegram.value) {
+    hapticImpact('light')
+    hapticSelection() // Легкий щелчок
+  }
 }
 
-const hapticDoubleBeat = () => {
-  triggerHaptic('light')
-  setTimeout(() => triggerHaptic('light'), 30)
-}
-
-const hapticTripleBeat = () => {
-  triggerHaptic('light')
-  setTimeout(() => triggerHaptic('light'), 20)
-  setTimeout(() => triggerHaptic('light'), 40)
-}
-
-const hapticFinale = () => {
-  triggerHaptic('medium')
-  setTimeout(() => triggerHaptic('medium'), 50)
-  setTimeout(() => triggerHaptic('medium'), 100)
-  setTimeout(() => triggerHaptic('medium'), 150)
+// Вибрация при финале
+const finalHaptic = () => {
+  if (isTelegram.value) {
+    hapticNotification('success')
+    setTimeout(() => hapticNotification('success'), 200)
+    setTimeout(() => hapticNotification('success'), 400)
+  }
 }
 
 // ========== ВЫЧИСЛЯЕМЫЕ СВОЙСТВА ==========
@@ -214,15 +273,9 @@ const updateBeatAnimation = () => {
       heartScale.value = scaleFactor
     }
 
-    // ТАКТИЛЬНАЯ ОТДАЧА В НАЧАЛЕ КАЖДОГО УДАРА
+    // HAPTIC FEEDBACK В НАЧАЛЕ КАЖДОГО УДАРА
     if (touching.value && beatPhase < 0.05) {
-      if (currentBPM < 100) {
-        hapticBeat()
-      } else if (currentBPM < 140) {
-        hapticDoubleBeat()
-      } else {
-        hapticTripleBeat()
-      }
+      heartbeatHaptic()
     }
 
     if (touching.value && beatPhase > 0.1 && beatPhase < 0.2 && particles.value.length < MAX_PARTICLES) {
@@ -338,8 +391,8 @@ const start = (e) => {
   touching.value = true
   touchStartTime.value = Date.now()
 
-  // Тактильная отдача при касании
-  hapticBeat()
+  // HAPTIC ПРИ КАСАНИИ
+  touchHaptic()
 
   for (let i = 0; i < 25; i++) {
     setTimeout(() => createParticle(true), i * 2)
@@ -360,8 +413,8 @@ const final = () => {
     setTimeout(() => createParticle(true), i * 1.5)
   }
 
-  // Финальная тактильная отдача
-  hapticFinale()
+  // ФИНАЛЬНАЯ ВИБРАЦИЯ
+  finalHaptic()
 }
 
 // ========== СБРОС ==========
@@ -380,6 +433,9 @@ const reset = () => {
 
 // ========== LIFECYCLE ==========
 onMounted(() => {
+  // Инициализируем Telegram
+  initTelegram()
+
   nextTick(() => {
     lastBeatTime = Date.now()
     updateBPMSmoothly()
