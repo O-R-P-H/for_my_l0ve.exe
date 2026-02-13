@@ -490,6 +490,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   height: 100vh;
   background: radial-gradient(circle at 50% 50%, #1a1424, #0a0812);
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -499,17 +500,18 @@ const message = ref('Спасибо, что держишь моё сердце. 
   overflow: hidden;
 }
 
+/* Исправленный wrapper для сердца */
 .heart-wrapper {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
   pointer-events: none;
   transition: opacity 0.6s ease;
+  z-index: 30;
 }
 
 .heart-wrapper.fade-out {
