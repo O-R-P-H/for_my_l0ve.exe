@@ -49,7 +49,7 @@
 
     <!-- ГРУСТНЫЙ ЭКРАН (ЕСЛИ ОТПУСТИЛИ РАНЬШЕ) -->
     <transition name="sad-slide">
-      <div v-if="showSad" class="sad-screen">
+      <div v-if="showSad" class="sad-screen" @touchstart.stop @touchend.stop @click.stop>
         <div class="sad-content">
           <div class="sad-image">
             <!-- Сюда вставь свою картинку -->
@@ -57,14 +57,14 @@
           </div>
           <h2 class="sad-title">Не отпускай! 😢</h2>
           <p class="sad-message">Держи сердечко крепче, чтобы оно забилось быстрее...</p>
-          <button class="sad-reset" @click="reset">Попробовать снова ❤️</button>
+          <button class="sad-reset" @touchstart.stop.prevent="reset" @click.stop.prevent="reset">Попробовать снова ❤️</button>
         </div>
       </div>
     </transition>
 
     <!-- ФИНАЛ -->
     <transition name="final-slide">
-      <div v-if="showFinal" class="final">
+      <div v-if="showFinal" class="final" @touchstart.stop @touchend.stop @click.stop>
         <div class="final-content">
           <h2>Ты — мой ритм ❤️</h2>
           <div class="collage">
@@ -76,7 +76,7 @@
             </div>
           </div>
           <p class="message">{{ message }}</p>
-          <button class="reset" @click="reset">Ещё раз</button>
+          <button class="reset" @touchstart.stop.prevent="reset" @click.stop.prevent="reset">Ещё раз</button>
         </div>
       </div>
     </transition>
@@ -96,7 +96,7 @@ const bpm = ref(65)
 const heartScale = ref(1)
 const heart = ref(null)
 const showFinal = ref(false)
-const showSad = ref(false) // Грустный экран
+const showSad = ref(false)
 const particles = ref([])
 const glowIntensity = ref(20)
 
@@ -114,7 +114,7 @@ const MAX_BPM = 180
 const FINAL_TIME = 40
 const BASE_BPM = 65
 const MAX_PARTICLES = 80
-const SAD_DELAY = 500 // Показываем грустный экран через 500мс после отпускания
+const SAD_DELAY = 500
 
 // Эмодзи для частиц
 const EMOJIS = ['❤️', '💖', '💗', '💓', '💕', '💘', '💝', '✨', '⭐', '🌟', '🔥', '🌸', '🫶']
@@ -144,7 +144,6 @@ const hapticSelection = () => {
   }
 }
 
-// Вибрация в такт сердцу
 const heartbeatHaptic = () => {
   if (!tg?.HapticFeedback) return
 
@@ -252,7 +251,6 @@ const updateBeatAnimation = () => {
       heartScale.value = scaleFactor
     }
 
-    // HAPTIC В НАЧАЛЕ КАЖДОГО УДАРА
     if (touching.value && beatPhase < 0.05) {
       heartbeatHaptic()
     }
@@ -367,7 +365,6 @@ const start = (e) => {
   e.preventDefault()
   if (showFinal.value || showSad.value) return
 
-  // Очищаем таймер грустного экрана
   if (sadTimeout) {
     clearTimeout(sadTimeout)
     sadTimeout = null
@@ -376,7 +373,6 @@ const start = (e) => {
   touching.value = true
   touchStartTime.value = Date.now()
 
-  // HAPTIC ПРИ КАСАНИИ
   touchHaptic()
 
   for (let i = 0; i < 25; i++) {
@@ -387,13 +383,10 @@ const start = (e) => {
 const end = (e) => {
   e.preventDefault()
 
-  // Если касание было и финал ещё не наступил
   if (touching.value && !showFinal.value && !showSad.value) {
     const holdTime = (Date.now() - touchStartTime.value) / 1000
 
-    // Если держали меньше 40 секунд
     if (holdTime < FINAL_TIME) {
-      // Показываем грустный экран через небольшую задержку
       sadTimeout = setTimeout(() => {
         showSad.value = true
         touching.value = false
@@ -407,7 +400,6 @@ const end = (e) => {
 
 // ========== ФИНАЛ ==========
 const final = () => {
-  // Очищаем таймер грустного экрана
   if (sadTimeout) {
     clearTimeout(sadTimeout)
     sadTimeout = null
@@ -421,23 +413,37 @@ const final = () => {
     setTimeout(() => createParticle(true), i * 1.5)
   }
 
-  // ФИНАЛЬНАЯ ВИБРАЦИЯ
   finalHaptic()
 }
 
 // ========== СБРОС ==========
-const reset = () => {
-  console.log('Reset called') // Для отладки
+const reset = (e) => {
+  if (e) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  console.log('Reset clicked')
+
+  // Сбрасываем все состояния
   showFinal.value = false
   showSad.value = false
   touching.value = false
+
+  // Сбрасываем BPM
   targetBPM = BASE_BPM
   currentBPM = BASE_BPM
   bpm.value = BASE_BPM
+
+  // Сбрасываем визуальные эффекты
   heartScale.value = 1
   glowIntensity.value = 20
+
+  // Сбрасываем тайминги
   lastBeatTime = Date.now()
   beatPhase = 0
+
+  // Очищаем частицы
   particles.value = []
 
   // Очищаем таймер
@@ -449,7 +455,6 @@ const reset = () => {
 
 // ========== LIFECYCLE ==========
 onMounted(() => {
-  // Инициализируем Telegram
   if (tg) {
     tg.ready()
     tg.expand()
@@ -500,7 +505,6 @@ const message = ref('Спасибо, что держишь моё сердце. 
   overflow: hidden;
 }
 
-/* Исправленный wrapper для сердца */
 .heart-wrapper {
   position: absolute;
   top: 50%;
@@ -568,6 +572,10 @@ const message = ref('Спасибо, что держишь моё сердце. 
 
 .particles {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
@@ -671,16 +679,20 @@ const message = ref('Спасибо, что держишь моё сердце. 
 .sad-screen {
   position: fixed;
   top: 0;
+  right: 0;
+  bottom: 0;
   left: 0;
   width: 100%;
   height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 20px;
   background: radial-gradient(circle at 50% 50%, #1a1424, #0a0812);
   pointer-events: auto;
+  box-sizing: border-box;
+  touch-action: manipulation;
 }
 
 .sad-content {
@@ -692,6 +704,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   align-items: center;
   color: white;
   animation: sadPop 0.6s ease;
+  pointer-events: auto;
 }
 
 @keyframes sadPop {
@@ -708,6 +721,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
 .sad-image {
   margin-bottom: 30px;
   animation: sadFloat 3s ease infinite;
+  pointer-events: none;
 }
 
 @keyframes sadFloat {
@@ -720,6 +734,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   height: 150px;
   object-fit: contain;
   filter: drop-shadow(0 0 30px rgba(255,51,102,0.3));
+  pointer-events: none;
 }
 
 .sad-title {
@@ -728,6 +743,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   text-shadow: 0 0 20px #ff3366;
   font-weight: 700;
   text-align: center;
+  pointer-events: none;
 }
 
 .sad-message {
@@ -741,6 +757,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   max-width: 320px;
   border: 2px solid rgba(255, 51, 102, 0.2);
   line-height: 1.6;
+  pointer-events: none;
 }
 
 .sad-reset {
@@ -755,6 +772,11 @@ const message = ref('Спасибо, что держишь моё сердце. 
   transition: all 0.3s;
   font-weight: 600;
   box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1001;
 }
 
 .sad-reset:active {
@@ -800,16 +822,20 @@ const message = ref('Спасибо, что держишь моё сердце. 
 .final {
   position: fixed;
   top: 0;
+  right: 0;
+  bottom: 0;
   left: 0;
   width: 100%;
   height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 20px;
   background: radial-gradient(circle at 50% 50%, #1a1424, #0a0812);
   pointer-events: auto;
+  box-sizing: border-box;
+  touch-action: manipulation;
 }
 
 .final-content {
@@ -821,6 +847,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   align-items: center;
   color: white;
   animation: contentPop 0.8s ease 0.2s both;
+  pointer-events: auto;
 }
 
 @keyframes contentPop {
@@ -842,6 +869,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   text-align: center;
   line-height: 1.3;
   animation: titleGlow 2s ease infinite;
+  pointer-events: none;
 }
 
 @keyframes titleGlow {
@@ -856,6 +884,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   width: 100%;
   max-width: 300px;
   margin-bottom: 30px;
+  pointer-events: none;
 }
 
 .photo {
@@ -870,6 +899,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   animation: photoPop 0.5s ease backwards;
   box-shadow: 0 10px 25px rgba(0,0,0,0.4);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  pointer-events: none;
 }
 
 .photo:hover {
@@ -906,6 +936,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   line-height: 1.6;
   box-shadow: 0 10px 30px rgba(0,0,0,0.3);
   animation: messageAppear 0.6s ease 0.5s both;
+  pointer-events: none;
 }
 
 @keyframes messageAppear {
@@ -932,6 +963,11 @@ const message = ref('Спасибо, что держишь моё сердце. 
   font-weight: 600;
   box-shadow: 0 8px 20px rgba(0,0,0,0.3);
   animation: buttonAppear 0.6s ease 0.7s both;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1001;
 }
 
 @keyframes buttonAppear {
