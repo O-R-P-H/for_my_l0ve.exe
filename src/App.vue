@@ -26,17 +26,17 @@
     </div>
 
     <!-- BPM -->
-    <div class="bpm">
+    <div class="bpm" :class="{ 'fade-out': showFinal }">
       <span>❤️</span>
       <span class="bpm-value">{{ Math.round(bpm) }}</span>
       <span>BPM</span>
     </div>
 
     <!-- Статус -->
-    <div class="status" :class="{ touching }">{{ statusText }}</div>
+    <div class="status" :class="{ touching, 'fade-out': showFinal }">{{ statusText }}</div>
 
     <!-- СЕРДЦЕ -->
-    <div class="heart-wrapper">
+    <div class="heart-wrapper" :class="{ 'fade-out': showFinal }">
       <div class="heart"
            ref="heart"
            :style="{
@@ -48,14 +48,23 @@
     </div>
 
     <!-- ФИНАЛ -->
-    <div v-if="showFinal" class="final">
-      <h2>Ты — мой ритм ❤️</h2>
-      <div class="collage">
-        <div v-for="i in 4" :key="i" class="photo">📸</div>
+    <transition name="final-slide">
+      <div v-if="showFinal" class="final">
+        <div class="final-content">
+          <h2>Ты — мой ритм ❤️</h2>
+          <div class="collage">
+            <div v-for="i in 4" :key="i" class="photo">
+              <span v-if="i === 1">📸</span>
+              <span v-if="i === 2">💝</span>
+              <span v-if="i === 3">✨</span>
+              <span v-if="i === 4">💫</span>
+            </div>
+          </div>
+          <p class="message">{{ message }}</p>
+          <button class="reset" @click="reset">Ещё раз</button>
+        </div>
       </div>
-      <p class="message">{{ message }}</p>
-      <button class="reset" @click="reset">Ещё раз</button>
-    </div>
+    </transition>
   </div>
 </template>
 
@@ -434,6 +443,11 @@ const message = ref('Спасибо, что держишь моё сердце. 
   top: 0;
   left: 0;
   pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+.heart-wrapper.fade-out {
+  opacity: 0;
 }
 
 .heart {
@@ -538,8 +552,13 @@ const message = ref('Спасибо, что держишь моё сердце. 
   font-weight: 600;
   border: 1px solid rgba(255, 255, 255, 0.15);
   z-index: 40;
-  transition: all 0.2s ease;
+  transition: opacity 0.6s ease, transform 0.6s ease;
   box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+
+.bpm.fade-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px);
 }
 
 .bpm-value {
@@ -564,9 +583,14 @@ const message = ref('Спасибо, что держишь моё сердце. 
   border: 1px solid rgba(255, 255, 255, 0.15);
   z-index: 40;
   white-space: nowrap;
-  transition: all 0.3s ease;
+  transition: opacity 0.6s ease, transform 0.6s ease, background 0.3s ease, box-shadow 0.3s ease;
   box-shadow: 0 6px 20px rgba(0,0,0,0.3);
   font-weight: 500;
+}
+
+.status.fade-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px);
 }
 
 .status.touching {
@@ -575,105 +599,187 @@ const message = ref('Спасибо, что держишь моё сердце. 
   box-shadow: 0 0 35px rgba(255, 51, 102, 0.25);
 }
 
+/* Плавный переход для финала */
+.final-slide-enter-active {
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.final-slide-leave-active {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.final-slide-enter-from {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.final-slide-enter-to {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.final-slide-leave-from {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.final-slide-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
 .final {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(145deg, #0c0a12, #020208);
   display: flex;
-  flex-direction: column;
   justify-content: center;
   align-items: center;
   z-index: 100;
   padding: 20px;
-  color: white;
-  animation: fadeIn 0.5s ease;
+  background: radial-gradient(circle at 50% 50%, #1a1424, #0a0812);
+  pointer-events: auto;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.final-content {
+  max-width: 400px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  animation: contentPop 0.8s ease 0.2s both;
+}
+
+@keyframes contentPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .final h2 {
   font-size: 2rem;
-  margin-bottom: 25px;
+  margin-bottom: 30px;
   text-shadow: 0 0 30px #ff3366, 0 0 60px rgba(255,51,102,0.5);
-  animation: titlePop 0.4s ease;
   font-weight: 700;
   text-align: center;
+  line-height: 1.3;
+  animation: titleGlow 2s ease infinite;
 }
 
-@keyframes titlePop {
-  0% { transform: scale(0.9); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes titleGlow {
+  0%, 100% { text-shadow: 0 0 30px #ff3366, 0 0 60px rgba(255,51,102,0.5); }
+  50% { text-shadow: 0 0 40px #ff3366, 0 0 80px rgba(255,51,102,0.7); }
 }
 
 .collage {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 15px;
   width: 100%;
-  max-width: 280px;
-  margin-bottom: 25px;
+  max-width: 300px;
+  margin-bottom: 30px;
 }
 
 .photo {
   aspect-ratio: 1;
   background: linear-gradient(145deg, #ff3366, #b31f4a);
-  border-radius: 18px;
+  border-radius: 20px;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 2rem;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  animation: photoAppear 0.3s ease backwards;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  font-size: 2.5rem;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  animation: photoPop 0.5s ease backwards;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-.photo:nth-child(1) { animation-delay: 0.05s; }
-.photo:nth-child(2) { animation-delay: 0.1s; }
-.photo:nth-child(3) { animation-delay: 0.15s; }
-.photo:nth-child(4) { animation-delay: 0.2s; }
+.photo:hover {
+  transform: scale(1.05);
+  box-shadow: 0 15px 35px rgba(255,51,102,0.4);
+}
 
-@keyframes photoAppear {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
+.photo:nth-child(1) { animation-delay: 0.1s; }
+.photo:nth-child(2) { animation-delay: 0.2s; }
+.photo:nth-child(3) { animation-delay: 0.3s; }
+.photo:nth-child(4) { animation-delay: 0.4s; }
+
+@keyframes photoPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) rotate(-5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
 }
 
 .message {
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   text-align: center;
   background: rgba(255, 51, 102, 0.15);
   backdrop-filter: blur(15px);
-  padding: 24px;
-  border-radius: 28px;
-  margin-bottom: 25px;
-  max-width: 280px;
-  border: 1px solid rgba(255, 51, 102, 0.2);
+  padding: 25px;
+  border-radius: 30px;
+  margin-bottom: 30px;
+  max-width: 320px;
+  border: 2px solid rgba(255, 51, 102, 0.2);
   line-height: 1.6;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  animation: messageAppear 0.6s ease 0.5s both;
+}
+
+@keyframes messageAppear {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .reset {
   background: rgba(255, 51, 102, 0.15);
   border: 2px solid #ff3366;
   color: white;
-  font-size: 1.1rem;
-  padding: 14px 32px;
+  font-size: 1.2rem;
+  padding: 16px 40px;
   border-radius: 60px;
   backdrop-filter: blur(10px);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s;
   font-weight: 600;
-  box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  animation: buttonAppear 0.6s ease 0.7s both;
+}
+
+@keyframes buttonAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .reset:active {
   transform: scale(0.95);
   background: rgba(255, 51, 102, 0.3);
+  box-shadow: 0 5px 15px rgba(255,51,102,0.4);
 }
 
 @media (max-width: 480px) {
@@ -695,12 +801,27 @@ const message = ref('Спасибо, что держишь моё сердце. 
   }
 
   .final h2 {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
+    margin-bottom: 25px;
   }
 
   .message {
+    font-size: 1.1rem;
+    padding: 20px;
+  }
+
+  .reset {
     font-size: 1rem;
-    padding: 18px;
+    padding: 14px 32px;
+  }
+
+  .collage {
+    gap: 12px;
+    max-width: 260px;
+  }
+
+  .photo {
+    font-size: 2rem;
   }
 }
 </style>
