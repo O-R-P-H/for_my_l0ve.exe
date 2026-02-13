@@ -1,5 +1,5 @@
 <template>
-  <div class="container" @touchstart="start" @touchend="end" @touchcancel="end">
+  <div class="container" @touchstart="start" @touchend="end" @touchcancel="end" @touchmove="onTouchMove">
 
     <!-- Статические эмодзи под наклоном -->
     <div class="static-emoji emoji-1">❤️</div>
@@ -46,12 +46,12 @@
     <!-- BPM -->
     <div class="bpm" :class="{ 'fade-out': showFinal || showSad }">
       <span>❤️</span>
-      <span class="bpm-value">{{ Math.round(bpm) }}</span>
+      <span class="bpm-value">{{ displayBPM }}</span>
       <span>BPM</span>
     </div>
 
-    <!-- Статус - ИСПРАВЛЕН -->
-    <div class="status" :class="{ 'status-touching': touching && !showFinal && !showSad }">{{ statusText }}</div>
+    <!-- СТАТУС - МАКСИМАЛЬНО ЖЕСТКО -->
+    <div class="status" :class="statusClass">{{ displayStatus }}</div>
 
     <!-- СЕРДЦЕ -->
     <div class="heart-wrapper" :class="{ 'fade-out': showFinal || showSad }">
@@ -70,7 +70,6 @@
       <div v-if="showSad" class="sad-screen" @touchstart.stop @touchend.stop @click.stop>
         <div class="sad-content">
           <div class="sad-image">
-            <!-- 👇👇👇 ВСТАВЬ СВОЕ ГРУСТНОЕ ФОТО СЮДА 👇👇👇 -->
             <img src="./img/me_sad.png" alt="грустно" class="sad-img">
           </div>
           <h2 class="sad-title">Не отпускай! 😢</h2>
@@ -86,7 +85,6 @@
         <div class="final-content">
           <h2>Ты — мой ритм ❤️</h2>
 
-          <!-- 👇👇👇 КОЛЛАЖ С ФОТО - ВСТАВЬ СВОИ ПУТИ В src 👇👇👇 -->
           <div class="collage">
             <div class="photo">
               <img src="./img/IMG_7572.JPG" alt="фото 1" class="photo-img">
@@ -103,6 +101,7 @@
           </div>
 
           <p class="message">{{ message }}</p>
+          <p>Я ТЕБЯ ЛЮБЛЮ ❤️❤️❤️</p>
           <button class="reset" @touchstart.stop.prevent="reset" @click.stop.prevent="reset">Ещё раз</button>
         </div>
       </div>
@@ -111,7 +110,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'
 
 // ========== TELEGRAM WEBAPP ==========
 const tg = window.Telegram?.WebApp
@@ -128,6 +127,9 @@ const particles = ref([])
 const glowIntensity = ref(20)
 const message = ref('Спасибо, что держишь моё сердце. С тобой оно бьется чаще.')
 
+// Добавляем принудительный статус для отладки
+const forceStatus = ref('')
+
 let particleId = 0
 let animationFrame = null
 let beatAnimationFrame = null
@@ -136,6 +138,7 @@ let targetBPM = 65
 let currentBPM = 65
 let beatPhase = 0
 let sadTimeout = null
+let statusUpdateInterval = null
 
 // ========== КОНСТАНТЫ ==========
 const MAX_BPM = 180
@@ -209,17 +212,49 @@ const sadHaptic = () => {
   }
 }
 
-// ========== ВЫЧИСЛЯЕМЫЕ СВОЙСТВА ==========
-const statusText = computed(() => {
+// ========== ВЫЧИСЛЯЕМЫЕ СВОЙСТВА - АБСОЛЮТНО ЖЕСТКО ==========
+const displayBPM = computed(() => {
+  return Math.round(bpm.value)
+})
+
+// Функция для получения статуса (будем вызывать принудительно)
+const getStatusText = () => {
+  // Принудительный статус для отладки (можно убрать)
+  if (forceStatus.value) return forceStatus.value
+
+  // Приоритет: финальный экран
   if (showFinal.value) return '❤️ Спасибо ❤️'
+
+  // Грустный экран
   if (showSad.value) return 'Не отпускай... 😢'
+
+  // Не касаются
   if (!touching.value) return '👆 Коснись'
 
-  // Когда касаются
-  if (currentBPM < 85) return '😌 Спокойно'
-  if (currentBPM < 110) return '💓 Чаще'
-  if (currentBPM < 140) return '💗 Быстрее'
-  return '💖 Сильнее'
+  // Касаются - используем floor для гарантии
+  const rawBPM = bpm.value
+  const intBPM = Math.floor(rawBPM)
+
+  console.log('BPM raw:', rawBPM, 'int:', intBPM, 'touching:', touching.value) // Для отладки
+
+  if (intBPM < 85) return '😌 РИНА!!!'
+  if (intBPM < 110) return '💓 ТЫ'
+  if (intBPM < 140) return '💗 САМАЯ'
+  return '💖 АХУЕННАЯ'
+}
+
+// Реактивный статус
+const displayStatus = computed(() => getStatusText())
+
+// Класс для статуса
+const statusClass = computed(() => ({
+  'status-touching': touching.value && !showFinal.value && !showSad.value,
+  'fade-out': showFinal.value || showSad.value
+}))
+
+// Следим за изменениями для отладки
+watch([touching, bpm, showFinal, showSad], () => {
+  console.log('Status updated:', displayStatus.value, 'touching:', touching.value, 'bpm:', bpm.value)
 })
 
 // ========== ПЛАВНОЕ ОБНОВЛЕНИЕ BPM ==========
@@ -390,6 +425,13 @@ const startParticleFlow = () => {
   }, 200)
 }
 
+// ========== ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ СТАТУСА ==========
+const forceUpdateStatus = () => {
+  // Просто триггерим computed свойство
+  const status = displayStatus.value
+  console.log('Forced status update:', status)
+}
+
 // ========== ОБРАБОТЧИКИ ==========
 const start = (e) => {
   e.preventDefault()
@@ -404,6 +446,9 @@ const start = (e) => {
   touchStartTime.value = Date.now()
 
   touchHaptic()
+
+  // Принудительно обновляем статус
+  forceUpdateStatus()
 
   for (let i = 0; i < 25; i++) {
     setTimeout(() => createParticle(true), i * 2)
@@ -421,11 +466,21 @@ const end = (e) => {
         showSad.value = true
         touching.value = false
         sadHaptic()
+        forceUpdateStatus()
       }, SAD_DELAY)
     }
   }
 
   touching.value = false
+  forceUpdateStatus()
+}
+
+// Добавляем обработчик touchmove для принудительного обновления
+const onTouchMove = (e) => {
+  e.preventDefault()
+  if (touching.value) {
+    forceUpdateStatus()
+  }
 }
 
 // ========== ФИНАЛ ==========
@@ -438,6 +493,8 @@ const final = () => {
   showFinal.value = true
   touching.value = false
   showSad.value = false
+
+  forceUpdateStatus()
 
   for (let i = 0; i < 60; i++) {
     setTimeout(() => createParticle(true), i * 1.5)
@@ -453,32 +510,28 @@ const reset = (e) => {
     e.stopPropagation()
   }
 
-  // Сбрасываем все состояния
   showFinal.value = false
   showSad.value = false
   touching.value = false
 
-  // Сбрасываем BPM
   targetBPM = BASE_BPM
   currentBPM = BASE_BPM
   bpm.value = BASE_BPM
 
-  // Сбрасываем визуальные эффекты
   heartScale.value = 1
   glowIntensity.value = 20
 
-  // Сбрасываем тайминги
   lastBeatTime = Date.now()
   beatPhase = 0
 
-  // Очищаем частицы
   particles.value = []
 
-  // Очищаем таймер
   if (sadTimeout) {
     clearTimeout(sadTimeout)
     sadTimeout = null
   }
+
+  forceUpdateStatus()
 }
 
 // ========== LIFECYCLE ==========
@@ -499,6 +552,11 @@ onMounted(() => {
         createParticle()
       }
     }, 1200)
+
+    // Принудительное обновление статуса каждые 100мс
+    statusUpdateInterval = setInterval(() => {
+      forceUpdateStatus()
+    }, 100)
   })
 })
 
@@ -506,6 +564,7 @@ onUnmounted(() => {
   cancelAnimationFrame(animationFrame)
   cancelAnimationFrame(beatAnimationFrame)
   clearInterval(particleFlowInterval)
+  clearInterval(statusUpdateInterval)
   if (sadTimeout) {
     clearTimeout(sadTimeout)
   }
@@ -705,7 +764,7 @@ onUnmounted(() => {
   text-shadow: 0 0 10px rgba(255,102,128,0.5);
 }
 
-/* ИСПРАВЛЕННЫЙ СТАТУС */
+/* СТАТУС - МАКСИМАЛЬНО ЖЕСТКО */
 .status {
   position: absolute;
   top: 22%;
