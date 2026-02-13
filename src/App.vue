@@ -26,17 +26,17 @@
     </div>
 
     <!-- BPM -->
-    <div class="bpm" :class="{ 'fade-out': showFinal }">
+    <div class="bpm" :class="{ 'fade-out': showFinal || showSad }">
       <span>❤️</span>
       <span class="bpm-value">{{ Math.round(bpm) }}</span>
       <span>BPM</span>
     </div>
 
     <!-- Статус -->
-    <div class="status" :class="{ touching, 'fade-out': showFinal }">{{ statusText }}</div>
+    <div class="status" :class="{ touching, 'fade-out': showFinal || showSad }">{{ statusText }}</div>
 
     <!-- СЕРДЦЕ -->
-    <div class="heart-wrapper" :class="{ 'fade-out': showFinal }">
+    <div class="heart-wrapper" :class="{ 'fade-out': showFinal || showSad }">
       <div class="heart"
            ref="heart"
            :style="{
@@ -46,6 +46,21 @@
         <div class="heart-inner"></div>
       </div>
     </div>
+
+    <!-- ГРУСТНЫЙ ЭКРАН (ЕСЛИ ОТПУСТИЛИ РАНЬШЕ) -->
+    <transition name="sad-slide">
+      <div v-if="showSad" class="sad-screen">
+        <div class="sad-content">
+          <div class="sad-image">
+            <!-- Сюда вставь свою картинку -->
+            <img src="https://i.imgur.com/your-sad-image.png" alt="грустно" class="sad-img">
+          </div>
+          <h2 class="sad-title">Не отпускай! 😢</h2>
+          <p class="sad-message">Держи сердечко крепче, чтобы оно забилось быстрее...</p>
+          <button class="sad-reset" @click="reset">Попробовать снова ❤️</button>
+        </div>
+      </div>
+    </transition>
 
     <!-- ФИНАЛ -->
     <transition name="final-slide">
@@ -81,6 +96,7 @@ const bpm = ref(65)
 const heartScale = ref(1)
 const heart = ref(null)
 const showFinal = ref(false)
+const showSad = ref(false) // Грустный экран
 const particles = ref([])
 const glowIntensity = ref(20)
 
@@ -91,12 +107,14 @@ let lastBeatTime = 0
 let targetBPM = 65
 let currentBPM = 65
 let beatPhase = 0
+let sadTimeout = null
 
 // ========== КОНСТАНТЫ ==========
 const MAX_BPM = 180
 const FINAL_TIME = 40
 const BASE_BPM = 65
 const MAX_PARTICLES = 80
+const SAD_DELAY = 500 // Показываем грустный экран через 500мс после отпускания
 
 // Эмодзи для частиц
 const EMOJIS = ['❤️', '💖', '💗', '💓', '💕', '💘', '💝', '✨', '⭐', '🌟', '🔥', '🌸', '🫶']
@@ -157,9 +175,17 @@ const finalHaptic = () => {
   }
 }
 
+const sadHaptic = () => {
+  if (tg?.HapticFeedback) {
+    hapticNotification('warning')
+    hapticImpact('heavy')
+  }
+}
+
 // ========== ВЫЧИСЛЯЕМЫЕ СВОЙСТВА ==========
 const statusText = computed(() => {
   if (showFinal.value) return '❤️ Спасибо ❤️'
+  if (showSad.value) return 'Не отпускай... 😢'
   if (!touching.value) return 'Коснись'
   if (currentBPM < 85) return 'Спокойно 😌'
   if (currentBPM < 110) return 'Чаще 💓'
@@ -169,9 +195,9 @@ const statusText = computed(() => {
 
 // ========== ПЛАВНОЕ ОБНОВЛЕНИЕ BPM ==========
 const updateBPMSmoothly = () => {
-  if (!touching.value && !showFinal.value) {
+  if (!touching.value && !showFinal.value && !showSad.value) {
     targetBPM = BASE_BPM
-  } else if (touching.value && !showFinal.value) {
+  } else if (touching.value && !showFinal.value && !showSad.value) {
     const holdTime = (Date.now() - touchStartTime.value) / 1000
     const progress = Math.min(holdTime / FINAL_TIME, 1)
     targetBPM = BASE_BPM + (MAX_BPM - BASE_BPM) * Math.pow(progress, 1.1)
@@ -196,7 +222,7 @@ const updateBPMSmoothly = () => {
 
 // ========== ПЛАВНАЯ ПУЛЬСАЦИЯ ==========
 const updateBeatAnimation = () => {
-  if (!heart.value || showFinal.value) {
+  if (!heart.value || showFinal.value || showSad.value) {
     beatAnimationFrame = requestAnimationFrame(updateBeatAnimation)
     return
   }
@@ -327,7 +353,7 @@ const startParticleFlow = () => {
   if (particleFlowInterval) clearInterval(particleFlowInterval)
 
   particleFlowInterval = setInterval(() => {
-    if (touching.value && !showFinal.value && particles.value.length < MAX_PARTICLES) {
+    if (touching.value && !showFinal.value && !showSad.value && particles.value.length < MAX_PARTICLES) {
       const count = Math.min(Math.floor(currentBPM / 20) + 2, 5)
       for (let i = 0; i < count; i++) {
         setTimeout(() => createParticle(), i * 15)
@@ -339,7 +365,13 @@ const startParticleFlow = () => {
 // ========== ОБРАБОТЧИКИ ==========
 const start = (e) => {
   e.preventDefault()
-  if (showFinal.value) return
+  if (showFinal.value || showSad.value) return
+
+  // Очищаем таймер грустного экрана
+  if (sadTimeout) {
+    clearTimeout(sadTimeout)
+    sadTimeout = null
+  }
 
   touching.value = true
   touchStartTime.value = Date.now()
@@ -354,13 +386,36 @@ const start = (e) => {
 
 const end = (e) => {
   e.preventDefault()
+
+  // Если касание было и финал ещё не наступил
+  if (touching.value && !showFinal.value && !showSad.value) {
+    const holdTime = (Date.now() - touchStartTime.value) / 1000
+
+    // Если держали меньше 40 секунд
+    if (holdTime < FINAL_TIME) {
+      // Показываем грустный экран через небольшую задержку
+      sadTimeout = setTimeout(() => {
+        showSad.value = true
+        touching.value = false
+        sadHaptic()
+      }, SAD_DELAY)
+    }
+  }
+
   touching.value = false
 }
 
 // ========== ФИНАЛ ==========
 const final = () => {
+  // Очищаем таймер грустного экрана
+  if (sadTimeout) {
+    clearTimeout(sadTimeout)
+    sadTimeout = null
+  }
+
   showFinal.value = true
   touching.value = false
+  showSad.value = false
 
   for (let i = 0; i < 60; i++) {
     setTimeout(() => createParticle(true), i * 1.5)
@@ -372,7 +427,9 @@ const final = () => {
 
 // ========== СБРОС ==========
 const reset = () => {
+  console.log('Reset called') // Для отладки
   showFinal.value = false
+  showSad.value = false
   touching.value = false
   targetBPM = BASE_BPM
   currentBPM = BASE_BPM
@@ -382,6 +439,12 @@ const reset = () => {
   lastBeatTime = Date.now()
   beatPhase = 0
   particles.value = []
+
+  // Очищаем таймер
+  if (sadTimeout) {
+    clearTimeout(sadTimeout)
+    sadTimeout = null
+  }
 }
 
 // ========== LIFECYCLE ==========
@@ -399,7 +462,7 @@ onMounted(() => {
     startParticleFlow()
 
     setInterval(() => {
-      if (!touching.value && !showFinal.value && Math.random() > 0.8 && particles.value.length < MAX_PARTICLES / 2) {
+      if (!touching.value && !showFinal.value && !showSad.value && Math.random() > 0.8 && particles.value.length < MAX_PARTICLES / 2) {
         createParticle()
       }
     }, 1200)
@@ -410,6 +473,9 @@ onUnmounted(() => {
   cancelAnimationFrame(animationFrame)
   cancelAnimationFrame(beatAnimationFrame)
   clearInterval(particleFlowInterval)
+  if (sadTimeout) {
+    clearTimeout(sadTimeout)
+  }
 })
 
 const message = ref('Спасибо, что держишь моё сердце. С тобой оно бьется чаще.')
@@ -599,31 +665,132 @@ const message = ref('Спасибо, что держишь моё сердце. 
   box-shadow: 0 0 35px rgba(255, 51, 102, 0.25);
 }
 
-/* Плавный переход для финала */
-.final-slide-enter-active {
-  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+/* Грустный экран */
+.sad-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  padding: 20px;
+  background: radial-gradient(circle at 50% 50%, #1a1424, #0a0812);
+  pointer-events: auto;
 }
 
-.final-slide-leave-active {
+.sad-content {
+  max-width: 400px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  animation: sadPop 0.6s ease;
+}
+
+@keyframes sadPop {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sad-image {
+  margin-bottom: 30px;
+  animation: sadFloat 3s ease infinite;
+}
+
+@keyframes sadFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.sad-img {
+  width: 150px;
+  height: 150px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 30px rgba(255,51,102,0.3));
+}
+
+.sad-title {
+  font-size: 2rem;
+  margin-bottom: 20px;
+  text-shadow: 0 0 20px #ff3366;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sad-message {
+  font-size: 1.2rem;
+  text-align: center;
+  background: rgba(255, 51, 102, 0.15);
+  backdrop-filter: blur(15px);
+  padding: 20px;
+  border-radius: 30px;
+  margin-bottom: 30px;
+  max-width: 320px;
+  border: 2px solid rgba(255, 51, 102, 0.2);
+  line-height: 1.6;
+}
+
+.sad-reset {
+  background: rgba(255, 51, 102, 0.15);
+  border: 2px solid #ff3366;
+  color: white;
+  font-size: 1.2rem;
+  padding: 16px 40px;
+  border-radius: 60px;
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+}
+
+.sad-reset:active {
+  transform: scale(0.95);
+  background: rgba(255, 51, 102, 0.3);
+}
+
+/* Финальный экран */
+.final-slide-enter-active,
+.sad-slide-enter-active {
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.final-slide-leave-active,
+.sad-slide-leave-active {
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.final-slide-enter-from {
+.final-slide-enter-from,
+.sad-slide-enter-from {
   opacity: 0;
   transform: scale(0.9);
 }
 
-.final-slide-enter-to {
+.final-slide-enter-to,
+.sad-slide-enter-to {
   opacity: 1;
   transform: scale(1);
 }
 
-.final-slide-leave-from {
+.final-slide-leave-from,
+.sad-slide-leave-from {
   opacity: 1;
   transform: scale(1);
 }
 
-.final-slide-leave-to {
+.final-slide-leave-to,
+.sad-slide-leave-to {
   opacity: 0;
   transform: scale(0.9);
 }
@@ -822,6 +989,20 @@ const message = ref('Спасибо, что держишь моё сердце. 
 
   .photo {
     font-size: 2rem;
+  }
+
+  .sad-title {
+    font-size: 1.6rem;
+  }
+
+  .sad-message {
+    font-size: 1rem;
+    padding: 16px;
+  }
+
+  .sad-img {
+    width: 120px;
+    height: 120px;
   }
 }
 </style>
