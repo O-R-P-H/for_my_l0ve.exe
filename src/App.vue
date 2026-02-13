@@ -25,14 +25,14 @@
       </div>
     </div>
 
-    <!-- BPM (СВЕРХУ) -->
+    <!-- BPM -->
     <div class="bpm">
       <span>❤️</span>
       <span class="bpm-value">{{ Math.round(bpm) }}</span>
       <span>BPM</span>
     </div>
 
-    <!-- СТАТУС (ПОД BPM, НАД СЕРДЦЕМ) -->
+    <!-- Статус -->
     <div class="status" :class="{ touching }">{{ statusText }}</div>
 
     <!-- СЕРДЦЕ -->
@@ -71,6 +71,7 @@ const heart = ref(null)
 const showFinal = ref(false)
 const particles = ref([])
 const glowIntensity = ref(20)
+const vibrationEnabled = ref(false)
 
 let particleId = 0
 let animationFrame = null
@@ -80,6 +81,7 @@ let targetBPM = 65
 let currentBPM = 65
 let beatPhase = 0
 let lastParticleCleanup = 0
+let vibrationTimeout = null
 
 // ========== КОНСТАНТЫ ==========
 const MAX_BPM = 180
@@ -89,6 +91,49 @@ const MAX_PARTICLES = 80
 
 // Эмодзи для частиц
 const EMOJIS = ['❤️', '💖', '💗', '💓', '💕', '💘', '💝', '✨', '⭐', '🌟', '🔥', '🌸', '🫶']
+
+// ========== ПРОВЕРКА ВИБРАЦИИ ==========
+const checkVibrationSupport = () => {
+  // Проверяем поддержку вибрации на iOS
+  if (window.navigator && window.navigator.vibrate) {
+    // На iOS нужно запросить разрешение через пользовательский жест
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+
+    if (isIOS) {
+      // Для iOS просто проверяем наличие функции
+      vibrationEnabled.value = true
+      console.log('iOS vibration supported (requires user gesture)')
+    } else {
+      vibrationEnabled.value = true
+    }
+  } else {
+    console.log('Vibration not supported')
+    vibrationEnabled.value = false
+  }
+}
+
+// ========== ВИБРАЦИЯ В ТАКТ ==========
+const vibrateInBeat = () => {
+  if (!vibrationEnabled.value || !touching.value || showFinal.value) return
+
+  // Очищаем предыдущий таймер
+  if (vibrationTimeout) {
+    clearTimeout(vibrationTimeout)
+  }
+
+  // Длина вибрации зависит от BPM (чем выше BPM, тем короче вибрация)
+  const vibrationDuration = Math.max(20, 80 - (currentBPM - BASE_BPM) * 0.5)
+
+  try {
+    // Пробуем вызвать вибрацию
+    window.navigator.vibrate(vibrationDuration)
+
+    // На iOS вибрация может не сработать без пользовательского жеста,
+    // но мы всё равно пытаемся
+  } catch (e) {
+    console.log('Vibration failed:', e)
+  }
+}
 
 // ========== ВЫЧИСЛЯЕМЫЕ СВОЙСТВА ==========
 const statusText = computed(() => {
@@ -157,6 +202,11 @@ const updateBeatAnimation = () => {
       heartScale.value = 1 + (scaleFactor - 1) * 1.4
     } else {
       heartScale.value = scaleFactor
+    }
+
+    // ВИБРАЦИЯ В ПИКЕ ПУЛЬСАЦИИ
+    if (touching.value && beatPhase > 0.12 && beatPhase < 0.18) {
+      vibrateInBeat()
     }
 
     if (touching.value && beatPhase > 0.1 && beatPhase < 0.2 && particles.value.length < MAX_PARTICLES) {
@@ -272,6 +322,16 @@ const start = (e) => {
   touching.value = true
   touchStartTime.value = Date.now()
 
+  // Пробуем активировать вибрацию пользовательским жестом
+  if (vibrationEnabled.value) {
+    try {
+      // Короткая вибрация для подтверждения касания
+      window.navigator.vibrate(10)
+    } catch (e) {
+      console.log('Initial vibration failed')
+    }
+  }
+
   for (let i = 0; i < 25; i++) {
     setTimeout(() => createParticle(true), i * 2)
   }
@@ -280,6 +340,10 @@ const start = (e) => {
 const end = (e) => {
   e.preventDefault()
   touching.value = false
+
+  if (vibrationTimeout) {
+    clearTimeout(vibrationTimeout)
+  }
 }
 
 // ========== ФИНАЛ ==========
@@ -291,8 +355,8 @@ const final = () => {
     setTimeout(() => createParticle(true), i * 1.5)
   }
 
-  if (navigator.vibrate) {
-    navigator.vibrate([80, 40, 80, 40, 160])
+  if (vibrationEnabled.value) {
+    window.navigator.vibrate([80, 40, 80, 40, 160])
   }
 }
 
@@ -308,12 +372,17 @@ const reset = () => {
   lastBeatTime = Date.now()
   beatPhase = 0
   particles.value = []
+
+  if (vibrationTimeout) {
+    clearTimeout(vibrationTimeout)
+  }
 }
 
 // ========== LIFECYCLE ==========
 onMounted(() => {
   nextTick(() => {
     lastBeatTime = Date.now()
+    checkVibrationSupport()
     updateBPMSmoothly()
     updateBeatAnimation()
     startParticleFlow()
@@ -330,6 +399,9 @@ onUnmounted(() => {
   cancelAnimationFrame(animationFrame)
   cancelAnimationFrame(beatAnimationFrame)
   clearInterval(particleFlowInterval)
+  if (vibrationTimeout) {
+    clearTimeout(vibrationTimeout)
+  }
 })
 
 const message = ref('Спасибо, что держишь моё сердце. С тобой оно бьется чаще.')
@@ -481,7 +553,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
 
 .status {
   position: absolute;
-  top: 22%; /* ПОД BPM, НАД СЕРДЦЕМ */
+  top: 22%;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(15, 15, 25, 0.8);
@@ -489,7 +561,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   padding: 14px 32px;
   border-radius: 60px;
   color: white;
-  font-size: 1.3rem; /* Чуть меньше, чем BPM */
+  font-size: 1.3rem;
   border: 1px solid rgba(255, 255, 255, 0.15);
   z-index: 40;
   white-space: nowrap;
@@ -614,7 +686,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   .status {
     font-size: 1rem;
     padding: 10px 24px;
-    top: 20%; /* Адаптировал для мобилок */
+    top: 20%;
   }
 
   .bpm {
