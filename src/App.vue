@@ -1,7 +1,25 @@
 <template>
   <div class="container" @touchstart="start" @touchend="end" @touchcancel="end">
 
-    <!-- Искры и эмодзи -->
+    <!-- Статические эмодзи под наклоном -->
+    <div class="static-emoji emoji-1">❤️</div>
+    <div class="static-emoji emoji-2">💖</div>
+    <div class="static-emoji emoji-3">💗</div>
+    <div class="static-emoji emoji-4">💓</div>
+    <div class="static-emoji emoji-5">💕</div>
+    <div class="static-emoji emoji-6">💘</div>
+    <div class="static-emoji emoji-7">💝</div>
+    <div class="static-emoji emoji-8">✨</div>
+    <div class="static-emoji emoji-9">⭐</div>
+    <div class="static-emoji emoji-10">🌟</div>
+    <div class="static-emoji emoji-11">🔥</div>
+    <div class="static-emoji emoji-12">🌸</div>
+    <div class="static-emoji emoji-13">🫶</div>
+    <div class="static-emoji emoji-14">💞</div>
+    <div class="static-emoji emoji-15">💋</div>
+    <div class="static-emoji emoji-16">💌</div>
+
+    <!-- Искры и эмодзи (динамические) -->
     <div class="particles">
       <div v-for="p in particles" :key="p.id" class="particle" :class="{ 'is-emoji': p.isEmoji }" :style="{
         left: p.x + 'px',
@@ -32,8 +50,8 @@
       <span>BPM</span>
     </div>
 
-    <!-- Статус -->
-    <div class="status" :class="{ touching, 'fade-out': showFinal || showSad }">{{ statusText }}</div>
+    <!-- Статус - ИСПРАВЛЕН -->
+    <div class="status" :class="{ 'status-touching': touching && !showFinal && !showSad }">{{ statusText }}</div>
 
     <!-- СЕРДЦЕ -->
     <div class="heart-wrapper" :class="{ 'fade-out': showFinal || showSad }">
@@ -47,13 +65,13 @@
       </div>
     </div>
 
-    <!-- ГРУСТНЫЙ ЭКРАН (ЕСЛИ ОТПУСТИЛИ РАНЬШЕ) -->
+    <!-- ГРУСТНЫЙ ЭКРАН -->
     <transition name="sad-slide">
       <div v-if="showSad" class="sad-screen" @touchstart.stop @touchend.stop @click.stop>
         <div class="sad-content">
           <div class="sad-image">
-            <!-- Сюда вставь свою картинку -->
-            <img src="https://i.imgur.com/your-sad-image.png" alt="грустно" class="sad-img">
+            <!-- 👇👇👇 ВСТАВЬ СВОЕ ГРУСТНОЕ ФОТО СЮДА 👇👇👇 -->
+            <img src="./img/me_sad.png" alt="грустно" class="sad-img">
           </div>
           <h2 class="sad-title">Не отпускай! 😢</h2>
           <p class="sad-message">Держи сердечко крепче, чтобы оно забилось быстрее...</p>
@@ -62,19 +80,28 @@
       </div>
     </transition>
 
-    <!-- ФИНАЛ -->
+    <!-- ФИНАЛЬНЫЙ ЭКРАН -->
     <transition name="final-slide">
       <div v-if="showFinal" class="final" @touchstart.stop @touchend.stop @click.stop>
         <div class="final-content">
           <h2>Ты — мой ритм ❤️</h2>
+
+          <!-- 👇👇👇 КОЛЛАЖ С ФОТО - ВСТАВЬ СВОИ ПУТИ В src 👇👇👇 -->
           <div class="collage">
-            <div v-for="i in 4" :key="i" class="photo">
-              <span v-if="i === 1">📸</span>
-              <span v-if="i === 2">💝</span>
-              <span v-if="i === 3">✨</span>
-              <span v-if="i === 4">💫</span>
+            <div class="photo">
+              <img src="./img/IMG_7572.JPG" alt="фото 1" class="photo-img">
+            </div>
+            <div class="photo">
+              <img src="./img/IMG_7573.JPG" alt="фото 2" class="photo-img">
+            </div>
+            <div class="photo">
+              <img src="./img/IMG_7543.PNG" alt="фото 4" class="photo-img">
+            </div>
+            <div class="photo">
+              <img src="./img/IMG_7493.jpg" alt="фото 3" class="photo-img">
             </div>
           </div>
+
           <p class="message">{{ message }}</p>
           <button class="reset" @touchstart.stop.prevent="reset" @click.stop.prevent="reset">Ещё раз</button>
         </div>
@@ -99,6 +126,7 @@ const showFinal = ref(false)
 const showSad = ref(false)
 const particles = ref([])
 const glowIntensity = ref(20)
+const message = ref('Спасибо, что держишь моё сердце. С тобой оно бьется чаще.')
 
 let particleId = 0
 let animationFrame = null
@@ -185,11 +213,13 @@ const sadHaptic = () => {
 const statusText = computed(() => {
   if (showFinal.value) return '❤️ Спасибо ❤️'
   if (showSad.value) return 'Не отпускай... 😢'
-  if (!touching.value) return 'Коснись'
-  if (currentBPM < 85) return 'Спокойно 😌'
-  if (currentBPM < 110) return 'Чаще 💓'
-  if (currentBPM < 140) return 'Быстрее 💗'
-  return 'Сильнее 💖'
+  if (!touching.value) return '👆 Коснись'
+
+  // Когда касаются
+  if (currentBPM < 85) return '😌 Спокойно'
+  if (currentBPM < 110) return '💓 Чаще'
+  if (currentBPM < 140) return '💗 Быстрее'
+  return '💖 Сильнее'
 })
 
 // ========== ПЛАВНОЕ ОБНОВЛЕНИЕ BPM ==========
@@ -423,8 +453,6 @@ const reset = (e) => {
     e.stopPropagation()
   }
 
-  console.log('Reset clicked')
-
   // Сбрасываем все состояния
   showFinal.value = false
   showSad.value = false
@@ -482,8 +510,6 @@ onUnmounted(() => {
     clearTimeout(sadTimeout)
   }
 })
-
-const message = ref('Спасибо, что держишь моё сердце. С тобой оно бьется чаще.')
 </script>
 
 <style scoped>
@@ -493,7 +519,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: radial-gradient(circle at 50% 50%, #1a1424, #0a0812);
+  background: radial-gradient(circle at 50% 50%, #000000, #0a0812);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -504,6 +530,40 @@ const message = ref('Спасибо, что держишь моё сердце. 
   user-select: none;
   overflow: hidden;
 }
+
+/* Статические эмодзи под наклоном */
+.static-emoji {
+  position: absolute;
+  font-size: 24px;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 5;
+  transform: rotate(-15deg);
+  filter: drop-shadow(0 0 5px rgba(255, 51, 102, 0.3));
+  animation: staticFloat 8s infinite ease-in-out;
+}
+
+@keyframes staticFloat {
+  0%, 100% { transform: rotate(-15deg) translateY(0); }
+  50% { transform: rotate(-15deg) translateY(-10px); }
+}
+
+.emoji-1 { bottom: 5%; left: 5%; font-size: 32px; animation-delay: 0s; }
+.emoji-2 { bottom: 8%; left: 15%; font-size: 28px; animation-delay: 0.5s; }
+.emoji-3 { bottom: 12%; left: 25%; font-size: 36px; animation-delay: 1s; }
+.emoji-4 { bottom: 3%; left: 35%; font-size: 24px; animation-delay: 1.5s; }
+.emoji-5 { bottom: 15%; left: 45%; font-size: 40px; animation-delay: 2s; }
+.emoji-6 { bottom: 7%; left: 55%; font-size: 30px; animation-delay: 2.5s; }
+.emoji-7 { bottom: 10%; left: 65%; font-size: 34px; animation-delay: 3s; }
+.emoji-8 { bottom: 4%; left: 75%; font-size: 26px; animation-delay: 3.5s; }
+.emoji-9 { bottom: 13%; left: 85%; font-size: 38px; animation-delay: 4s; }
+.emoji-10 { bottom: 6%; left: 95%; font-size: 32px; animation-delay: 4.5s; }
+.emoji-11 { bottom: 2%; left: 8%; font-size: 44px; animation-delay: 5s; }
+.emoji-12 { bottom: 18%; left: 18%; font-size: 28px; animation-delay: 5.5s; }
+.emoji-13 { bottom: 9%; left: 28%; font-size: 36px; animation-delay: 6s; }
+.emoji-14 { bottom: 14%; left: 38%; font-size: 32px; animation-delay: 6.5s; }
+.emoji-15 { bottom: 5%; left: 48%; font-size: 40px; animation-delay: 7s; }
+.emoji-16 { bottom: 11%; left: 58%; font-size: 30px; animation-delay: 7.5s; }
 
 .heart-wrapper {
   position: absolute;
@@ -645,6 +705,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   text-shadow: 0 0 10px rgba(255,102,128,0.5);
 }
 
+/* ИСПРАВЛЕННЫЙ СТАТУС */
 .status {
   position: absolute;
   top: 22%;
@@ -669,7 +730,7 @@ const message = ref('Спасибо, что держишь моё сердце. 
   transform: translateX(-50%) translateY(-20px);
 }
 
-.status.touching {
+.status.status-touching {
   background: rgba(255, 51, 102, 0.25);
   border-color: rgba(255, 51, 102, 0.4);
   box-shadow: 0 0 35px rgba(255, 51, 102, 0.25);
@@ -894,17 +955,18 @@ const message = ref('Спасибо, что держишь моё сердце. 
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 2.5rem;
   border: 3px solid rgba(255, 255, 255, 0.2);
   animation: photoPop 0.5s ease backwards;
   box-shadow: 0 10px 25px rgba(0,0,0,0.4);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  pointer-events: none;
+  overflow: hidden;
+  padding: 0;
 }
 
-.photo:hover {
-  transform: scale(1.05);
-  box-shadow: 0 15px 35px rgba(255,51,102,0.4);
+.photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .photo:nth-child(1) { animation-delay: 0.1s; }
@@ -1025,10 +1087,6 @@ const message = ref('Спасибо, что держишь моё сердце. 
     max-width: 260px;
   }
 
-  .photo {
-    font-size: 2rem;
-  }
-
   .sad-title {
     font-size: 1.6rem;
   }
@@ -1041,6 +1099,10 @@ const message = ref('Спасибо, что держишь моё сердце. 
   .sad-img {
     width: 120px;
     height: 120px;
+  }
+
+  .static-emoji {
+    font-size: 20px;
   }
 }
 </style>
